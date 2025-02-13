@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { createWalletClient, custom, Hex, type WalletClient } from 'viem';
 import { mainnet } from 'viem/chains';
 import base64url from 'base64url';
+import { PublicKey } from 'ox';
 
 type LoginResult = {
   safes: Record<string, {
@@ -160,10 +161,12 @@ export default function Login() {
       console.log('User:', user);
       console.log('Challenge:', challenge);
       const decodedChallenge = base64url.decode(challenge, 'hex');
-      const bufferChallenge = base64url.toBuffer(challenge);
-      const arrayBufferChallenge = bufferChallenge.buffer.slice(
-        bufferChallenge.byteOffset,
-        bufferChallenge.byteOffset + bufferChallenge.byteLength
+      console.log('decodedChallenge:', decodedChallenge);
+      const bufferChallengeHex = Buffer.from(decodedChallenge, 'hex');
+      // const bufferChallenge = base64url.toBuffer(challenge);
+      const arrayBufferChallenge = bufferChallengeHex.buffer.slice(
+        bufferChallengeHex.byteOffset,
+        bufferChallengeHex.byteOffset + bufferChallengeHex.byteLength
       );
 
       console.log('decodedChallenge:', decodedChallenge);
@@ -171,10 +174,10 @@ export default function Login() {
       const credential = await WebAuthnP256.createCredential({ 
         name: username || base64url.decode(user.id),
         challenge: arrayBufferChallenge,
-        rp: {
-          id: 'localhost',
-          name: 'Create Next App'
-        }
+        // rp: {
+        //   id: 'localhost',
+        //   name: 'Create Next App'
+        // }
       });
 
       console.log('credential:', credential);
@@ -192,6 +195,11 @@ export default function Login() {
 
       console.log(strClientDataJSON); // Logs the JSON string
       // console.log(jsonObject); // L
+
+ 
+      const publicKey = PublicKey.from(credential.publicKey);
+
+      console.log('PUBLIC KEY', publicKey);
 
       // Step 3: Send the signed challenge to the verify endpoint
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/passkey/verify`, {
@@ -212,7 +220,7 @@ export default function Login() {
                 // strAttestationObject
               ),
           },
-          username
+          publicKeyHex: PublicKey.toHex(publicKey)
         }),
       });
 

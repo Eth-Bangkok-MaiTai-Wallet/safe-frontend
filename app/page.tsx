@@ -1,17 +1,15 @@
 'use client';
 
-import { WebAuthnP256 } from 'ox';
+import { WebAuthnP256, Signature, PublicKey } from 'ox';
 import { useState } from 'react';
+import base64url from 'base64url';
+import { Hex } from 'viem';
 
 type SafeConfig = {
   passkey?: {
     name: string;
     id: string;
-    publicKey: {
-      prefix: number;
-      x: string;
-      y: string;
-    };
+    publicKey: Hex
   };
   multisig?: {
     owners: string[];
@@ -48,6 +46,7 @@ export default function Home() {
     safeModuleOwners: string[];
     safeModulePasskey: string | undefined;
   }> | null>(null);
+  const [useExistingPasskey, setUseExistingPasskey] = useState(false);
 
   const handleRegister = async () => {
     try {
@@ -57,15 +56,66 @@ export default function Home() {
       console.log('Created credential:', credential);
       
       updateConfig('register', {
+        name: passkeyName,
         id: credential.id,
-        publicKey: {
-          prefix: Number(credential.publicKey.prefix),
-          x: credential.publicKey.x.toString(),
-          y: credential.publicKey.y.toString()
-        }
+        publicKey: PublicKey.toHex(credential.publicKey)
       });
     } catch (error) {
       console.error('Failed to create credential:', error);
+    }
+  };
+
+  const handleUseExistingPasskey = async () => {
+    try {
+      // Get challenge from server
+      const challengeResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/passkey/challenge`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      const { challenge } = await challengeResponse.json();
+
+      // decode and sign
+      const decodedChallenge = base64url.decode(challenge);
+       
+      const { metadata, raw, signature } = await WebAuthnP256.sign({
+        challenge: decodedChallenge as Hex,
+      })
+
+      // send verification request
+      const verifyData = {
+        metadata: metadata,
+        challenge: decodedChallenge as Hex,
+        signature: Signature.toHex(signature),
+        credentialId: raw.id
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/safe/verify-passkey-signer`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(verifyData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to verify existing passkey');
+      }
+
+      const user = await response.json();
+
+      updateConfig('register', {
+        name: user.username,
+        id: user.passkey.id,
+        publicKey: user.passkey.publicKeyHex
+    });
+    
+    } catch (error) {
+      console.error('Error using existing passkey:', error);
     }
   };
 
@@ -89,7 +139,7 @@ export default function Home() {
     });
   };
 
-  const updateConfig = (trigger: 'register' | 'owners', credential?: { id: string, publicKey: { prefix: number, x: string, y: string } }) => {
+  const updateConfig = (trigger: 'register' | 'owners', credential?: { name?: string, id: string, publicKey: Hex }) => {
     setConfig(prevConfig => {
       const baseConfig = {
         ...prevConfig,
@@ -100,7 +150,7 @@ export default function Home() {
         return {
           ...baseConfig,
           passkey: { 
-            name: passkeyName,
+            name: credential.name || passkeyName,
             id: credential.id,
             publicKey: credential.publicKey
           },
@@ -180,24 +230,46 @@ export default function Home() {
                   <span className="text-base-content/60 cursor-help">ⓘ</span>
                 </div>
               </h2>
-              <div className="form-control w-full">
-                <label className="label">
-                  <span className="label-text text-base font-medium">Passkey name</span>
+              <div className="form-control">
+                <label className="label cursor-pointer">
+                  <span className="label-text">Use existing passkey</span> 
+                  <input
+                    type="checkbox"
+                    checked={useExistingPasskey}
+                    onChange={() => setUseExistingPasskey(!useExistingPasskey)}
+                    className="checkbox"
+                  />
                 </label>
-                <input 
-                  type="text" 
-                  value={passkeyName}
-                  onChange={(e) => setPasskeyName(e.target.value)}
-                  placeholder="Enter passkey name" 
-                  className="input input-bordered input-md bg-base-200 w-full focus:outline-none focus:border-primary" 
-                />
+              </div>
+              {!useExistingPasskey ? (
+                <>
+                  <div className="form-control w-full">
+                    <label className="label">
+                      <span className="label-text text-base font-medium">Passkey name</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      value={passkeyName}
+                      onChange={(e) => setPasskeyName(e.target.value)}
+                      placeholder="Enter passkey name" 
+                      className="input input-bordered input-md bg-base-200 w-full focus:outline-none focus:border-primary" 
+                    />
+                  </div>
+                  <button 
+                    className="btn btn-primary btn-md normal-case font-bold mt-4"
+                    onClick={handleRegister}
+                  >
+                    Register
+                  </button>
+                </>
+              ) : (
                 <button 
                   className="btn btn-primary btn-md normal-case font-bold mt-4"
-                  onClick={handleRegister}
+                  onClick={handleUseExistingPasskey}
                 >
-                  Register
+                  Use Existing
                 </button>
-              </div>
+              )}
             </div>
 
             {/* Owners Section - remove left border on mobile */}
