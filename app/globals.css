@@ -19,3 +19,25 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Add these utility classes */
+.card {
+  @apply bg-gray-800 p-6 rounded-xl;
+}
+
+.title {
+  @apply text-xl font-medium mb-4;
+}
+
+.actions {
+  @apply mt-6;
+}
+
+.button--loading {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Your existing button styles */
+button {
+  @apply w-full bg-yellow-500 text-black font-medium py-3 rounded-lg transition-all hover:bg-yellow-400;
+}
