@@ -5,6 +5,8 @@ import { useState } from 'react';
 export default function StrategiesPage() {
   const [strategyName, setStrategyName] = useState('');
   const [strategyConfig, setStrategyConfig] = useState('');
+  const [safeAddress, setSafeAddress] = useState('');
+  const [chainId, setChainId] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +33,35 @@ export default function StrategiesPage() {
     } catch (error) {
       console.error('Error creating strategy:', error);
       alert('Failed to create strategy');
+    }
+  };
+
+  const handleConfigure = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/safe/configure-session`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          safeAddress,
+          chainId: parseInt(chainId),
+          sessionConfig: {
+            name: strategyName,
+            config: strategyConfig,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to configure session');
+      }
+
+      alert('Session configured successfully');
+    } catch (error) {
+      console.error('Error configuring session:', error);
+      alert('Failed to configure session');
     }
   };
 
@@ -68,6 +99,37 @@ export default function StrategiesPage() {
           Create Strategy
         </button>
       </form>
+
+      <div className="mt-8">
+        <h2 className="text-xl font-bold mb-4">Configure Session</h2>
+        <div className="form-control mb-4">
+          <label className="label">
+            <span className="label-text">Safe Address</span>
+          </label>
+          <input
+            type="text"
+            value={safeAddress}
+            onChange={(e) => setSafeAddress(e.target.value)}
+            className="input input-bordered"
+            required
+          />
+        </div>
+        <div className="form-control mb-4">
+          <label className="label">
+            <span className="label-text">Chain ID</span>
+          </label>
+          <input
+            type="number"
+            value={chainId}
+            onChange={(e) => setChainId(e.target.value)}
+            className="input input-bordered"
+            required
+          />
+        </div>
+        <button onClick={handleConfigure} className="btn btn-secondary">
+          Configure
+        </button>
+      </div>
     </div>
   );
 }
