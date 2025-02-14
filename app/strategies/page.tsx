@@ -7,6 +7,7 @@ export default function StrategiesPage() {
   const [strategyConfig, setStrategyConfig] = useState('');
   const [safeAddress, setSafeAddress] = useState('');
   const [chainId, setChainId] = useState('');
+  const [sessionHash, setSessionHash] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,14 +55,33 @@ export default function StrategiesPage() {
         }),
       });
 
+      console.log('Response', response);
+
       if (!response.ok) {
         throw new Error('Failed to configure session');
       }
+
+      const data = await response.json();
+
+      console.log('Session configured successfully', data);
+
+      setSessionHash(data.hash);
 
       alert('Session configured successfully');
     } catch (error) {
       console.error('Error configuring session:', error);
       alert('Failed to configure session');
+    }
+  };
+
+  const handleSignSessionCreation = async () => {
+    try {
+      // TODO: Implement the logic to sign the session creation
+      console.log('Signing session creation with hash:', sessionHash);
+      // Add your signing logic here
+    } catch (error) {
+      console.error('Error signing session creation:', error);
+      alert('Failed to sign session creation');
     }
   };
 
@@ -129,6 +149,15 @@ export default function StrategiesPage() {
         <button onClick={handleConfigure} className="btn btn-secondary">
           Configure
         </button>
+
+        {sessionHash && (
+          <div className="mt-4">
+            <p>Session Hash: {sessionHash}</p>
+            <button onClick={handleSignSessionCreation} className="btn btn-primary mt-2">
+              Sign Session Creation
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
