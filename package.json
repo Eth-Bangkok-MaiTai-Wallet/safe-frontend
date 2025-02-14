@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@rhinestone/module-sdk": "^0.2.4",
     "@simplewebauthn/typescript-types": "^8.3.4",
     "base64url": "^3.0.1",
     "daisyui": "^4.12.23",
@@ -16,6 +17,7 @@
     "ox": "^0.6.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-json-view": "^1.21.3",
     "viem": "^2.22.17"
   },
   "devDependencies": {

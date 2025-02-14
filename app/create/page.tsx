@@ -4,6 +4,7 @@ import { WebAuthnP256, Signature, PublicKey } from 'ox';
 import { useState } from 'react';
 import base64url from 'base64url';
 import { Hex } from 'viem';
+import CreateTransactionButton from '../../components/CreateTransactionButton';
 
 type SafeConfig = {
   passkey?: {
@@ -47,6 +48,7 @@ export default function Home() {
     safeModulePasskey: string | undefined;
   }> | null>(null);
   const [useExistingPasskey, setUseExistingPasskey] = useState(false);
+  const [isCreatingSafe, setIsCreatingSafe] = useState(false);
 
   const handleRegister = async () => {
     try {
@@ -195,12 +197,27 @@ export default function Home() {
 
   const createSafe = async () => {
     try {
+      setIsCreatingSafe(true);
+      const createDto = {
+        chains: selectedChains,
+        passkey: config?.passkey ? {
+          name: config.passkey.name,
+          id: config.passkey.id,
+          publicKey: config.passkey.publicKey,
+        } : undefined,
+        multisig: config?.multisig ? {
+          owners: config.multisig.owners,
+          threshold: config.multisig.threshold,
+        } : undefined,
+      };
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/safe/create`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify(createDto),
       });
       
       if (!response.ok) {
@@ -212,6 +229,8 @@ export default function Home() {
       console.log('Safe created:', data);
     } catch (error) {
       console.error('Error creating safe:', error);
+    } finally {
+      setIsCreatingSafe(false);
     }
   };
 
@@ -430,9 +449,9 @@ export default function Home() {
               <button 
                 className="btn btn-primary btn-md normal-case font-bold w-full mt-8"
                 onClick={createSafe}
-                disabled={selectedChains.length === 0}
+                disabled={selectedChains.length === 0 || isCreatingSafe}
               >
-                Create Safe
+                {isCreatingSafe ? 'Creating Safe...' : 'Create Safe'}
               </button>
             </div>
           )}
@@ -452,6 +471,13 @@ export default function Home() {
                         <div>Passkey: {result.safeModulePasskey}</div>
                       )}
                     </div>
+                    <CreateTransactionButton
+                      safeAddress={result.safeAddress}
+                      chainId={parseInt(chainId)}
+                      passkeyId={config?.passkey?.id}
+                      safeLegacyOwners={result.safeLegacyOwners || []}
+                      safeModuleOwners={result.safeModuleOwners}
+                    />
                   </div>
                 ))}
               </div>
