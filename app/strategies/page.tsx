@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { sign } from 'ox/WebAuthnP256';
+import { Hex } from 'viem';
+import { getWebauthnValidatorSignature } from '@rhinestone/module-sdk';
 
 export default function StrategiesPage() {
   const [strategyName, setStrategyName] = useState('');
   const [strategyConfig, setStrategyConfig] = useState('');
   const [safeAddress, setSafeAddress] = useState('');
   const [chainId, setChainId] = useState('');
-  const [sessionHash, setSessionHash] = useState('');
+  const [sessionHash, setSessionHash] = useState<{hash: Hex, passkeyId: string}>({hash: '0x0' as Hex, passkeyId: ''});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +68,7 @@ export default function StrategiesPage() {
 
       console.log('Session configured successfully', data);
 
-      setSessionHash(data.hash);
+      setSessionHash({ hash: data.hash, passkeyId: data.passkeyId });
 
       alert('Session configured successfully');
     } catch (error) {
@@ -78,6 +81,39 @@ export default function StrategiesPage() {
     try {
       // TODO: Implement the logic to sign the session creation
       console.log('Signing session creation with hash:', sessionHash);
+
+
+      const {metadata, signature} = await sign({
+        challenge: sessionHash.hash,
+        credentialId: sessionHash.passkeyId,
+      });
+
+      console.log('Signature', signature);
+
+      const encodedSignature = getWebauthnValidatorSignature({
+        webauthn: metadata,
+        signature,
+        usePrecompiled: false,
+      });
+
+      console.log('Encoded signature', encodedSignature);
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/safe/sign-session-creation`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          hash: sessionHash.hash,
+          safeAddress,
+          chainId: Number(chainId),
+          encodedSignature,
+        }),
+      });
+
+      console.log('Response', response);
+
       // Add your signing logic here
     } catch (error) {
       console.error('Error signing session creation:', error);
@@ -152,7 +188,7 @@ export default function StrategiesPage() {
 
         {sessionHash && (
           <div className="mt-4">
-            <p>Session Hash: {sessionHash}</p>
+            <p>Session Hash: {sessionHash.hash}</p>
             <button onClick={handleSignSessionCreation} className="btn btn-primary mt-2">
               Sign Session Creation
             </button>
