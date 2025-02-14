@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, HelpCircle, Settings } from 'lucide-react';
-import { Client, createPublicClient, createWalletClient, custom, encodeAbiParameters, encodeFunctionData, encodePacked, http, HttpTransport, parseAbi, parseAbiParameters, parseEther } from 'viem';
+import { Client, createPublicClient, createWalletClient, custom, decodeAbiParameters, encodeAbiParameters, encodeFunctionData, encodePacked, http, HttpTransport, parseAbi, parseAbiParameters, parseEther, verifyMessage } from 'viem';
 import { arbitrum, mainnet, sepolia } from 'viem/chains';
 import truncateEthAddress from 'truncate-eth-address';
 
@@ -106,7 +106,7 @@ const DeFiInterface = () => {
 
   //////// SAFE ACCOUNT CREATION /////////
   // The public client is required for the safe account creation:
-  const publicClient = createPublicClient({
+  const publicClient = createPublicClient({  
     transport: http(),
     chain: arbitrum
   })
@@ -190,18 +190,33 @@ const DeFiInterface = () => {
     const swapRouterAddress = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
     const weth = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
     const usdc = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    const initialAmount = 1000000n
     setTokenIn(usdc)
     setTokenOut(weth)
     setAmountIn(1000000n)
-    // console.log("tokenIn: ")
+    console.log("tokenIn: ", tokenIn)
+    console.log("tokenOut: ", tokenOut)
+    console.log("amountIn: ", amountIn)
+
     const executionData = encodeAbiParameters(
-      // ['address', 'address', 'uint256'],
-      parseAbiParameters('address, address, uint256'),
-      [tokenIn, tokenOut, amountIn]
-    )
+      [
+        { type: "address" },
+        { type: "address" },
+        { type: "uint256" }
+      ],
+      [usdc, weth, initialAmount]
+    );
 
     console.log("Execution data: ", executionData)
+
+    // const result = decodeAbiParameters([
+    //   { type: "address" },
+    //   { type: "address" },
+    //   { type: "uint256" }
+    // ], executionData)
     
+    // console.log("Decoded execution data: ", result)
+
     // Test values for the module parameters:
     // executeInterval: 1 day in seconds (86400)
     // numberOfExecutions: 10
@@ -211,25 +226,18 @@ const DeFiInterface = () => {
     // lastExecutionTime: 0
     // executionData: empty bytes
     const calldata = encodePacked(
-      ['address', 'uint48', 'uint16', 'uint48', 'bool', 'uint48', 'bytes'], 
+      ['address', 'uint48', 'uint16', 'uint48', 'bytes'], 
       [
-        swapRouterAddress as `0x${string}`,
-        86400,                           // execute every 10s
-        10,                               // 10 total executions
-        // 0,                           // no executions completed yet
-        Number((await publicClient.getBlock()).timestamp), // start immediately
-        true,                             // enabled
-        0,                                // no executions yet
-        executionData                              // empty execution data
+        swapRouterAddress,
+        86400,                          
+        8,                               
+        Number((await publicClient.getBlock()).timestamp),
+        executionData
       ]
     )
 
     console.log("Before install module: ", calldata)
 
-    // The smart accounts client operates on 4337. It does not send transactions directly but instead creates user
-    // operations. The Pimlico bundler takes those user operations and sends them to the blockchain as regular
-    // transactions. We also use the Pimlico paymaster to sponsor the transaction. So, all interactions are free
-    // on Sepolia.
     const userOpHash = await smartAccountClient?.installModule({
       type: 'executor',
       address: scheduledOrdersModule,
@@ -244,10 +252,42 @@ const DeFiInterface = () => {
     })
   
     console.log('Module installed:', transactionReceipt)
+
+    //read job count
+    const jobCount = await publicClient.readContract({
+      address: scheduledOrdersModule,
+      abi: parseAbi(['function accountJobCount(address) view returns (uint256)']),
+      functionName: 'accountJobCount',
+      args: [safeAddress as `0x${string}`]
+    })
+
+    console.log("Job count: ", jobCount)
   
     setModuleIsInstalled(true)
     setSafeIsDeployed((await safeAccount?.isDeployed()) ?? false)
     setLoading(false)
+  }
+
+  const readExecutionConfig = async () => {
+    const executionConfigAbi = parseAbi([
+      'function executionLog(address, uint256) view returns ' +
+      '(uint48 executeInterval, ' +
+      'uint16 numberOfExecutions, ' +
+      'uint16 numberOfExecutionsCompleted, ' +
+      'uint48 startDate, ' +
+      'bool isEnabled, ' +
+      'uint48 lastExecutionTime, ' +
+      'bytes executionData)'
+    ])
+    //read config
+    const executionConfig = await publicClient.readContract({
+      address: scheduledOrdersModule,
+      abi: executionConfigAbi,
+      functionName: 'executionLog',
+      args: ["0x0f462982B410FE97634f2b85D2ada4637edd387C" as `0x${string}`, 1n]
+    })
+
+    console.log('Execution config:', executionConfig)
   }
 
   const uninstallModule = async () => {
@@ -255,14 +295,12 @@ const DeFiInterface = () => {
     console.log('Uninstalling module...')
 
     const init_calldata = encodePacked(
-      ['address', 'uint48', 'uint16', 'uint48', 'bool', 'uint48', 'bytes'], 
+      ['address', 'uint48', 'uint16', 'uint48', 'bytes'], 
       [
         '0x0000000000000000000000000000000000000000' as `0x${string}`,
         0,                           // execute every 10s
         0,                               // 10 total executions
         0, // start in 1 minute
-        false,                             // enabled
-        0,                                // no executions yet
         '0x'                              // empty execution data
       ]
     )
@@ -393,6 +431,8 @@ const DeFiInterface = () => {
     try {
       // USDC contract address on Arbitrum
       const usdcAddress = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
+
+      console.log("Safe address: ", safeAddress)
       
       // Encode USDC transfer function call
       const transferData = encodeFunctionData({
@@ -428,14 +468,25 @@ const DeFiInterface = () => {
 
   const executeOrder = async () => {
     setLoading(true)
-    console.log('Adding owner...')
+    console.log('Executing order...')
+
+    const jobCount = await publicClient.readContract({
+      address: scheduledOrdersModule,
+      abi: parseAbi(['function accountJobCount(address) view returns (uint256)']),
+      functionName: 'accountJobCount',
+      args: [safeAddress as `0x${string}`]
+    })
+
+    console.log("Job count: ", jobCount)
   
     // The addOwner function is part of the OwnableExecutorModule. We encode the function data using the viem library:
     const executeOrderData = encodeFunctionData({
       abi: parseAbi(['function executeOrder(uint256, uint160, uint256, uint24)']),
       functionName: 'executeOrder',
-      args: [1n, 4295128740n, 0n, 3000],
+      args: [1n, 1461446703485210103287273052203988822378723970341n, 0n, 3000],
     })
+    // 1461446703485210103287273052203988822378723970341
+    // 4295128740n
   
     // We use the smart account client to send the user operation: In this call, our smart account calls the `addOwner`
     // function at the `ownableExecutorModule` with the new owner's address.
@@ -661,6 +712,15 @@ const DeFiInterface = () => {
             className={loading ? 'button--loading' : ''}
           >
             Send USDC
+          </button>
+        </div>
+
+        <div className='actions'>
+          <button
+            onClick={readExecutionConfig}
+            className={loading ? 'button--loading' : ''}
+          >
+            Read Execution Config
           </button>
         </div>
       </div>
