@@ -31,6 +31,11 @@ Prerequisites:
 - Safe wallet
 - Ethereum node access (Infura/Alchemy)
 
+## Used Technologies
+- [Rhinestone modules](https://www.rhinestone.wtf/)
+- [Safe wallet](https://safe.global/)
+- DCA strategy
+
 ## Getting Started
 
 First, run the development server:
