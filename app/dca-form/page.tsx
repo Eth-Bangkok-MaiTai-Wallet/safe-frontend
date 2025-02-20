@@ -15,6 +15,7 @@ import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { Erc7579Actions, erc7579Actions } from 'permissionless/actions/erc7579';
 import { SendUserOperationParameters } from 'viem/account-abstraction';
 import { getBalance } from 'viem/actions';
+import { SafeSelector } from '@/components/SafeSelector'
 
 const DeFiInterface = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -44,6 +45,7 @@ const DeFiInterface = () => {
   const [sqrtPriceLimitX96, setSqrtPriceLimitX96] = useState<bigint>(4295128740n)
   const [executorTransactionIsSent, setExecutorTransactionIsSent] = useState(false)
   const [balance, setBalance] = useState<bigint | null>(null);
+  const [selectedSafe, setSelectedSafe] = useState<string | null>(null)
 
   // Initialize wallet client
   useEffect(() => {
@@ -64,9 +66,6 @@ const DeFiInterface = () => {
     if (!walletClient) return;
     const addresses = await walletClient.getAddresses();
     setOwnerAddress(addresses[0]);
-    if (addresses.length >= 1) {
-      init()
-    }
   };
 
   const connectWallet = async () => {
@@ -118,16 +117,17 @@ const DeFiInterface = () => {
   })
   const scheduledOrdersModule = "0x40dc90d670c89f322fa8b9f685770296428dcb6b"
 
-  const init = async () => {
+  const init = async (safeAddress?: string) => {
     const safeAccount = await toSafeSmartAccount<
-      '0.7',
+      '0.7', 
       '0xEBe001b3D534B9B6E2500FB78E67a1A137f561CE'
     >({
       client: publicClient,
       owners: [walletClient!],
       version: '1.4.1',
       safe4337ModuleAddress: '0x3Fdb5BC686e861480ef99A6E3FaAe03c0b9F32e2',
-      erc7579LaunchpadAddress: '0xEBe001b3D534B9B6E2500FB78E67a1A137f561CE'
+      erc7579LaunchpadAddress: '0xEBe001b3D534B9B6E2500FB78E67a1A137f561CE',
+      ...(safeAddress && { address: safeAddress })
     })
   
     const isSafeDeployed = await safeAccount.isDeployed()
@@ -147,6 +147,8 @@ const DeFiInterface = () => {
         }
       }
     }).extend(erc7579Actions())
+
+    console.log("Smart Account Client: ", smartAccountClient)
   
     // Check whether the module has been installed already:
     const isModuleInstalled =
@@ -602,7 +604,7 @@ const DeFiInterface = () => {
     </div>
   );
 
-  if (!ownerAddress || !safeAddress) {
+  if (!ownerAddress) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-6">
         <div className="max-w-md mx-auto">
@@ -625,18 +627,35 @@ const DeFiInterface = () => {
     );
   }
 
+  if (ownerAddress && !selectedSafe) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="max-w-md mx-auto">
+          <div className="card">
+            <div className="title">Select Safe Wallet</div>
+            <div className="text-gray-400 mb-4">
+              Choose a Safe wallet to use for this strategy:
+            </div>
+            <SafeSelector 
+              onSafeSelected={async (safeAddress: string) => {
+                setSelectedSafe(safeAddress)
+                await init(safeAddress)
+              }} 
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!moduleIsInstalled) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-6">
         <div className="max-w-md mx-auto">
           <div className="card">
-            <div className="title">Connect Wallet</div>
+            <div className="title">Setup Required</div>
             <div className="text-gray-400 mb-4">
-              Your Safe has the address{' '}
-              {safeAddress && truncateEthAddress(safeAddress)} and is{' '}
-              {safeIsDeployed ? 'deployed' : 'not yet deployed'}.
-              {!safeIsDeployed &&
-                'It will be deployed with your first transaction, when you install the module.'}
+              Your Safe ({truncateEthAddress(selectedSafe!)}) needs to install the DCA module.
             </div>
             <div className="text-gray-400 mb-4">
               You can now install the module. MetaMask will ask you to sign a
@@ -656,8 +675,6 @@ const DeFiInterface = () => {
     );
   }
 
-
-
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-md mx-auto">
@@ -665,7 +682,7 @@ const DeFiInterface = () => {
           Connected wallet: {truncateEthAddress(ownerAddress)}
         </div>
         <div className="mb-6 p-4 bg-gray-800 rounded-lg text-sm">
-          Safe account: {truncateEthAddress(safeAddress)}
+          Safe account: {truncateEthAddress(selectedSafe!)}
         </div>
         {renderBalance()}
         
